@@ -21,8 +21,10 @@ func createConnectionHandler(conn net.Conn) {
 	handlerProc := func() {
 		buffer := make([]byte, 512)
 
+		telnet := MakeTelnet(conn)
+
 		for {
-			n, err := conn.Read(buffer)
+			n, err := telnet.Read(buffer)
 			if err != nil {
 				logPrintf(err.Error())
 				break
@@ -33,7 +35,7 @@ func createConnectionHandler(conn net.Conn) {
 		}
 
 		logPrintf("Disconnecting\n")
-		conn.Close()
+		telnet.Close()
 	}
 
 	go handlerProc()
