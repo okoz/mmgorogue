@@ -31,8 +31,12 @@ func createConnectionHandler(conn net.Conn) {
 				break
 			}
 
-			//log.Printf("Received %d bytes\n", n)
-			logPrintf("Received %d bytes\n", n)
+			text := string(buffer[:n])
+			logPrintf("Received %d bytes: %s\n", n, text)
+
+			if "quit" == strings.TrimSpace(text) {
+				break
+			}
 		}
 
 		logPrintf("Disconnecting\n")
