@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"net"
 )
 
@@ -15,13 +14,10 @@ const (
 	GotDo
 	GotDont
 	GotSb
-	InSb
 )
 
-type TelnetCommand uint8
-
 const (
-	TelnetSe	= 240
+	TelnetSe byte	= 240
 	TelnetNop	= 241
 	TelnetDataMark	= 242
 	TelnetBrk	= 243
@@ -47,12 +43,18 @@ type Telnet interface {
 type TelnetData struct {
 	conn		net.Conn
 	buffer		[]byte
+	subBuffer	[]byte
 	telnetState	TelnetState
-	subCommand	TelnetCommand
+	subCommand	byte
 }
 
 func MakeTelnet(conn net.Conn) Telnet {
-	telnet := &TelnetData{conn, make([]byte, 512), TopLevel, TelnetNop}
+	telnet := &TelnetData{
+		conn,
+		make([]byte, 512),
+		make([]byte, 0, 512),
+		TopLevel,
+		TelnetNop}
 	telnet.initialize()
 	return telnet
 }
@@ -60,40 +62,82 @@ func MakeTelnet(conn net.Conn) Telnet {
 func (tc *TelnetData) initialize() {
 }
 
+func (tc *TelnetData) handleSubCommand() {
+}
+
 func (tc *TelnetData) Read(b []byte) (int, error) {
-	n, err := tc.conn.Read(tc.buffer)
-	if err != nil {
-		return 0, err
-	}
+	writePos := 0
 
-	for i := 0; i < n; {
-		cb := tc.buffer[i]
-
-		switch tc.telnetState {
-		case TopLevel:
-			switch cb {
-			case TelnetIac:
-				tc.telnetState = GotIac
-			default:
-				if tc.subCommand == TelnetNop {
-					// Write to main buffer.
-				} else {
-					// Write to sub command buffer.
-				}
-			}
-		case GotIac:
-		case GotWill:
-		case GotWont:
-		case GotDo:
-		case GotDont:
-		case GotSb:
-		case InSb:
+	for writePos == 0 {
+		n, err := tc.conn.Read(tc.buffer)
+		if err != nil {
+			return 0, err
 		}
 
-		i++
+
+		for i := 0; i < n; {
+			cb := tc.buffer[i]
+
+			switch tc.telnetState {
+			case TopLevel:
+				switch cb {
+				case TelnetIac:
+					tc.telnetState = GotIac
+				default:
+					if tc.subCommand == TelnetNop {
+						b[writePos] = cb
+						writePos++
+					} else {
+						tc.subBuffer = append(tc.subBuffer, cb)
+					}
+				}
+			case GotIac:
+				switch cb {
+				case TelnetIac:
+					if tc.subCommand == TelnetNop {
+						b[writePos] = cb
+						writePos++
+					} else {
+						tc.subBuffer = append(tc.subBuffer, cb)
+					}
+					tc.telnetState = TopLevel
+				case TelnetSb:
+					tc.telnetState = GotSb
+				case TelnetWill:
+					tc.telnetState = GotWill
+				case TelnetWont:
+					tc.telnetState = GotWont
+				case TelnetDo:
+					tc.telnetState = GotDo
+				case TelnetDont:
+					tc.telnetState = GotDont
+				case TelnetSe:
+					tc.telnetState = TopLevel
+					tc.handleSubCommand()
+					tc.subCommand = TelnetNop
+				default:
+					tc.telnetState = TopLevel
+				}
+			case GotWill:
+				tc.telnetState = TopLevel
+			case GotWont:
+				tc.telnetState = TopLevel
+			case GotDo:
+				tc.telnetState = TopLevel
+			case GotDont:
+				tc.telnetState = TopLevel
+			case GotSb:
+				tc.subCommand = cb
+				tc.subBuffer = tc.subBuffer[:0]
+
+				tc.telnetState = TopLevel
+			}
+
+			i++
+		}
 	}
 
-	return 0, errors.New("Hello, world!")
+	return writePos, nil
 }
 
 func (tc *TelnetData) Close() error {

@@ -22,6 +22,7 @@ func createConnectionHandler(conn net.Conn) {
 		buffer := make([]byte, 512)
 
 		telnet := MakeTelnet(conn)
+		defer telnet.Close()
 
 		for {
 			n, err := telnet.Read(buffer)
@@ -35,7 +36,6 @@ func createConnectionHandler(conn net.Conn) {
 		}
 
 		logPrintf("Disconnecting\n")
-		telnet.Close()
 	}
 
 	go handlerProc()
@@ -65,6 +65,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer listener.Close()
 
 	createConnectionListener(listener)
 
@@ -83,6 +84,4 @@ func main() {
 			break
 		}
 	}
-
-	listener.Close()
 }
