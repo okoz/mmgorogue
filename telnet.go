@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"strconv"
 )
 
 type TelnetState int
@@ -45,9 +46,15 @@ const (
 	TelnetLinemode		= 34
 )
 
+const TelnetEsc byte = 0x1b
+
 type Telnet interface {
 	Read(b []byte) (int, error)
+	GoTo(x, y uint16)
+	Put(b ...byte)
+	Write(b []byte)
 	Close() error
+	GetScreenSize() (uint16, uint16)
 }
 
 type TelnetData struct {
@@ -57,6 +64,7 @@ type TelnetData struct {
 	telnetState	TelnetState
 	subCommand	byte
 	negotiations	int
+	width, height	uint16
 }
 
 func MakeTelnet(conn net.Conn) Telnet {
@@ -66,7 +74,8 @@ func MakeTelnet(conn net.Conn) Telnet {
 		make([]byte, 0, 512),
 		TopLevel,
 		TelnetNop,
-		4}
+		4,
+		0, 0}
 	telnet.initialize()
 	return telnet
 }
@@ -85,9 +94,9 @@ func (tc *TelnetData) initialize() {
 func (tc *TelnetData) handleSubCommand() {
 	switch tc.subCommand {
 	case TelnetNaws:
-		width := uint16(tc.subBuffer[0] << 8 | tc.subBuffer[1])
-		height := uint16(tc.subBuffer[2] << 8 | tc.subBuffer[3])
-		log.Printf("width: %d height: %d", width, height)
+		tc.width = uint16(tc.subBuffer[0] << 8 | tc.subBuffer[1])
+		tc.height = uint16(tc.subBuffer[2] << 8 | tc.subBuffer[3])
+		log.Printf("width: %d height: %d", tc.width, tc.height)
 	case TelnetTerminalType:
 		terminalType := string(tc.subBuffer[1:])
 		log.Printf("terminal-type: %s", terminalType)
@@ -198,6 +207,29 @@ func (tc *TelnetData) Read(b []byte) (int, error) {
 	return writePos, nil
 }
 
+func (tc *TelnetData) GoTo(x, y uint16) {
+	buffer := make([]byte, 0, 16)
+	buffer = append(buffer, TelnetEsc, '[')
+	buffer = strconv.AppendInt(buffer, int64(y), 10)
+	buffer = append(buffer, ';')
+	buffer = strconv.AppendInt(buffer, int64(x), 10)
+	buffer = append(buffer, 'H')
+
+	tc.conn.Write(buffer)
+}
+
+func (tc *TelnetData) Put(b ...byte) {
+	tc.conn.Write(b)
+}
+
+func (tc *TelnetData) Write(b []byte) {
+	tc.conn.Write(b)
+}
+
 func (tc *TelnetData) Close() error {
 	return tc.conn.Close()
+}
+
+func (tc *TelnetData) GetScreenSize() (uint16, uint16) {
+	return tc.width, tc.height
 }

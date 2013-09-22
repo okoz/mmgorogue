@@ -33,10 +33,8 @@ func createConnectionHandler(conn net.Conn) {
 
 			text := string(buffer[:n])
 			logPrintf("Received %d bytes: %s\n", n, text)
-
-			if "quit" == strings.TrimSpace(text) {
-				break
-			}
+			telnet.GoTo(10, 10)
+			telnet.Put('X')
 		}
 
 		logPrintf("Disconnecting\n")
@@ -65,6 +63,8 @@ func createConnectionListener(listener net.Listener) {
 }
 
 func main() {
+	Initialize()
+
 	listener, err := net.Listen("tcp", ":23")
 	if err != nil {
 		log.Fatal(err)
@@ -72,6 +72,8 @@ func main() {
 	defer listener.Close()
 
 	createConnectionListener(listener)
+
+	createUpdateProcess()
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
