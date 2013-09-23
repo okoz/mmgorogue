@@ -38,6 +38,7 @@ type screen struct {
 	delta		[]byte
 }
 
+// MakeScreen creates a new screen of a specified width and height.
 func MakeScreen(width, height int) Screen {
 	s := &screen{
 		width: width,
@@ -55,10 +56,12 @@ func MakeScreen(width, height int) Screen {
 	return s
 }
 
+// Flip switches to a new screen buffer.
 func (s *screen) Flip() {
 	s.currentBuffer = 1 - s.currentBuffer
 }
 
+// GetDelta returns the difference between the current and last screen.
 func (s screen) GetDelta() []ScreenDelta {
 	cur := s.getCurrentBuffer()
 	last := s.buffer[1 - s.currentBuffer]
@@ -97,23 +100,28 @@ func (s screen) GetDelta() []ScreenDelta {
 	return delta
 }
 
+// GoTo places the write cursor at the specified position.
 func (s *screen) GoTo(x, y int) {
 	s.cx = x
 	s.cy = y
 }
 
+// getCurrentBuffer returns the current active buffer.
 func (s screen) getCurrentBuffer() []byte {
 	return s.buffer[s.currentBuffer]
 }
 
+// getCursorIndex returns the current linear cursor position.
 func (s screen) getCursorIndex() int {
 	return s.cy * s.width + s.cx
 }
 
+// Put writes a list of bytes to the screen.
 func (s *screen) Put(b ...byte) {
 	s.Write(b)
 }
 
+// Write writes an array of bytes to the screen.
 func (s *screen) Write(b []byte) {
 	n := Mini(len(b), s.width - s.cx)
 	for i := 0; i < n; i++ {
@@ -122,6 +130,7 @@ func (s *screen) Write(b []byte) {
 	}
 }
 
+// GetSize returns the width and height of the screen.
 func (s screen) GetSize() (int, int) {
 	return s.width, s.height
 }
