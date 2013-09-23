@@ -20,14 +20,53 @@ func (d ScreenDelta) String() string {
 	return fmt.Sprintf("x: %d y: %d data: %s", d.x, d.y, string(d.data))
 }
 
-// An abstract screen that is viewed by the player.
-type Screen interface {
-	Flip()
-	GetDelta() []ScreenDelta
+// A sub region of the screen.
+type Region interface {
 	GoTo(x, y int)
 	Put(b ...byte)
 	Write(b []byte)
 	GetSize() (int, int)
+	MakeRegion(x, y, w, h int) Region
+}
+
+type region struct {
+	parent		Region
+	x, y		int
+	width, height	int
+	cx, cy		int
+}
+
+func (r *region) GoTo(x, y int) {
+	r.cx = x
+	r.cy = y
+	r.parent.GoTo(r.x + r.cx, r.y + r.cy)
+}
+
+func (r *region) Put(b ...byte) {
+	r.Write(b)
+}
+
+func (r *region) Write(b []byte) {
+	remainingWidth := Mini(len(b), r.width - r.cx)
+	if remainingWidth > 0 {
+		r.parent.Write(b[:remainingWidth])
+		r.cx += remainingWidth
+	}
+}
+
+func (r region) GetSize() (int, int) {
+	return r.width, r.height
+}
+
+func (r *region) MakeRegion(x, y, w, h int) Region {
+	return &region{r, x, y, w, h, 0, 0}
+}
+
+// An abstract screen that is viewed by the player.
+type Screen interface {
+	Region
+	Flip()
+	GetDelta() []ScreenDelta
 }
 
 type screen struct {
@@ -133,4 +172,9 @@ func (s *screen) Write(b []byte) {
 // GetSize returns the width and height of the screen.
 func (s screen) GetSize() (int, int) {
 	return s.width, s.height
+}
+
+// MakeRegion returns a write interface for a subset of the region.
+func (s *screen) MakeRegion(x, y, w, h int) Region {
+	return &region{s, x, y, w, h, 0, 0}
 }
