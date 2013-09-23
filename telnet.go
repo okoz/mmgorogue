@@ -55,6 +55,7 @@ type Telnet interface {
 	Write(b []byte)
 	Close() error
 	GetScreenSize() (uint16, uint16)
+	ShowCursor(s bool)
 }
 
 type TelnetData struct {
@@ -232,4 +233,12 @@ func (tc *TelnetData) Close() error {
 
 func (tc *TelnetData) GetScreenSize() (uint16, uint16) {
 	return tc.width, tc.height
+}
+
+func (tc *TelnetData) ShowCursor(s bool) {
+	if s {
+		tc.sendCommand(TelnetEsc, '[', '?', '2', '5', 'h')
+	} else {
+		tc.sendCommand(TelnetEsc, '[', '?', '2', '5', 'l')
+	}
 }
