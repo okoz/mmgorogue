@@ -35,6 +35,7 @@ func createConnectionHandler(conn net.Conn) {
 		updateOut := make(chan byte)
 		updaterProc := func() {
 			defer func() { updateOut <- 1 }()
+			s := MakeScreen(80, 24)
 
 			for {
 				select {
@@ -45,21 +46,28 @@ func createConnectionHandler(conn net.Conn) {
 					mw, mh := m.GetSize()
 					for r := 0; r < mh; r++ {
 						m.GetRow(0, r, mw, buffer)
-						telnet.GoTo(1, uint16(r) + 1)
-						telnet.Write(buffer[:mw])
+						s.GoTo(0, r)
+						s.Write(buffer[:mw])
 					}
 
 					entities := theGame.GetEntities()
 					for e := range entities {
 						x, y := e.GetPosition()
-						telnet.GoTo(1 + uint16(x), 1 + uint16(y))
-						telnet.Put('@')
+						s.GoTo(x, y)
+						s.Put('@')
 					}
+
+					delta := s.GetDelta()
+
+					for _, d := range delta {
+						d.Apply(telnet)
+					}
+
+					s.Flip()
+
 					time.Sleep(100 * time.Millisecond)
 				}
 			}
-
-			updateOut <- 1
 		}
 
 		go updaterProc()
