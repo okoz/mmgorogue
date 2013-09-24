@@ -12,6 +12,42 @@ import (
 
 var theGame Game
 
+func readLine(telnet Telnet, echo bool, n int) (string, error) {
+	buffer := make([]byte, 512)
+	sb := make([]byte, 0, n)
+
+	for {
+		m, err := telnet.Read(buffer)
+		if err != nil {
+			return "", err
+		}
+
+		switch m {
+		case 1:
+			if buffer[0] == 127 {
+				if len(sb) > 0 {
+					sb = sb[:len(sb) - 1]
+					if echo {
+						telnet.Put(buffer[0])
+					}
+				}
+			} else if len(sb) < n {
+				sb = append(sb, buffer[0])
+				if echo {
+					telnet.Put(buffer[0])
+				}
+			}
+		case 2:
+			if buffer[0] == '\r' && buffer[1] == '\n' {
+				return string(sb), nil
+			}
+		}
+
+		print(string(sb))
+		print("\n")
+	}
+}
+
 // createConnectionHandler creates a goroutine that handles a single
 // telnet connection.
 func createConnectionHandler(conn net.Conn) {
@@ -35,7 +71,11 @@ func createConnectionHandler(conn net.Conn) {
 		updateOut := make(chan byte)
 		updaterProc := func() {
 			defer func() { updateOut <- 1 }()
+
 			s := MakeScreen(80, 24)
+			t := s.MakeRegion(25, 0, 55, 1)
+			t.GoTo(0, 0)
+			t.Write([]byte("Hello, world!"))
 
 			for {
 				select {
@@ -81,7 +121,7 @@ func createConnectionHandler(conn net.Conn) {
 
 			text := string(buffer[:n])
 			logPrintf("Received %d bytes: %s\n", n, text)
-			
+
 			if n == 3 {
 				x, y := player.GetPosition()
 				w, h := theGame.GetMap().GetSize()
