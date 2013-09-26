@@ -1,7 +1,10 @@
 package main
 
 import (
+	"log"
 	"math/rand"
+	"sync"
+	"time"
 )
 
 type Map interface {
@@ -66,17 +69,23 @@ func (m *map2D) GetRow(x, y, width int, b []byte) int {
 type Game interface {
 	GetMap() Map
 	GetEntities() map[Entity]bool
-	CreatePlayer() PlayerEntity
+	CreatePlayer(t Telnet) PlayerEntity
 	RemoveEntity(e Entity)
+	Update()
+	Start()
+	Stop()
 }
 
 type game struct {
-	worldMap Map
-	entities map[Entity]bool
+	worldMap	Map
+	entities	map[Entity]bool
+	quit		chan bool
+	done		chan bool
+	entityLock	sync.Locker
 }
 
 func MakeGame() Game {
-	return &game{MakeMap(24, 24), make(map[Entity]bool)}
+	return &game{MakeMap(24, 24), make(map[Entity]bool), make(chan bool), make(chan bool), &sync.Mutex{}}
 }
 
 func (g *game) GetMap() Map {
@@ -87,8 +96,15 @@ func (g *game) GetEntities() map[Entity]bool {
 	return g.entities
 }
 
-func (g *game) CreatePlayer() PlayerEntity {
-	p := &playerEntity{commands: make([]byte, 0, 8), owner: g}
+func (g *game) CreatePlayer(t Telnet) PlayerEntity {
+	g.entityLock.Lock()
+	defer g.entityLock.Unlock()
+
+	p := &playerEntity{commands: make([]byte, 0, 8),
+		owner: g,
+		screen: MakeScreen(80, 24),
+		telnet: t,
+		commandLock: &sync.Mutex{}}
 	width, height := g.worldMap.GetSize()
 
 	p.x = 1 + rand.Intn(width - 2)
@@ -99,13 +115,55 @@ func (g *game) CreatePlayer() PlayerEntity {
 }
 
 func (g *game) RemoveEntity(e Entity) {
+	g.entityLock.Lock()
+	defer g.entityLock.Unlock()
+
 	delete(g.entities, e)
+}
+
+func (g *game) Update() {
+	g.entityLock.Lock()
+	defer g.entityLock.Unlock()
+
+	for e, _ := range g.entities {
+		e.Update()
+	}
+
+	for e, _ := range g.entities {
+		e.PostUpdate()
+	}
+}
+
+func (g *game) run() {
+	defer func() { g.done <- true }()
+
+	for {
+		select {
+		case <- g.quit:
+			return
+		default:
+			g.Update()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+func (g *game) Start() {
+	go g.run()
+	log.Printf("Game started\n")
+}
+
+func (g *game) Stop() {
+	g.quit <- true
+	<- g.done
+	log.Printf("Game stopped\n")
 }
 
 // Entities.
 
 type Entity interface {
 	Update()
+	PostUpdate()
 	GetPosition() (int, int)
 	SetPosition(x, y int)
 }
@@ -119,9 +177,15 @@ type playerEntity struct {
 	x, y	 	int
 	commands	[]byte
 	owner		Game
+	screen		Screen
+	telnet		Telnet
+	commandLock	sync.Locker
 }
 
 func (p *playerEntity) Update() {
+	p.commandLock.Lock()
+	defer p.commandLock.Unlock()
+
 	for _, c := range p.commands {
 		x, y := p.x, p.y
 		w, h := p.owner.GetMap().GetSize()
@@ -155,6 +219,34 @@ func (p *playerEntity) Update() {
 	p.commands = p.commands[:0]
 }
 
+func (p *playerEntity) PostUpdate() {
+	s := p.screen
+	m := p.owner.GetMap()
+	mw, mh := m.GetSize()
+	buffer := make([]byte, 512)
+
+	for r := 0; r < mh; r++ {
+		m.GetRow(0, r, mw, buffer)
+		s.GoTo(0, r)
+		s.Write(buffer[:mw])
+	}
+
+	entities := p.owner.GetEntities()
+	for e := range entities {
+		x, y := e.GetPosition()
+		s.GoTo(x, y)
+		s.Put('@')
+	}
+
+	delta := s.GetDelta()
+
+	for _, d := range delta {
+		d.Apply(p.telnet)
+	}
+
+	s.Flip()
+}
+
 func (p playerEntity) GetPosition() (int, int) {
 	return p.x, p.y
 }
@@ -165,5 +257,8 @@ func (p *playerEntity) SetPosition(x, y int) {
 }
 
 func (p *playerEntity) AddCommand(command byte) {
+	p.commandLock.Lock()
+	defer p.commandLock.Unlock()
+
 	p.commands = append(p.commands, command)
 }
