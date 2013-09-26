@@ -88,7 +88,7 @@ func (g *game) GetEntities() map[Entity]bool {
 }
 
 func (g *game) CreatePlayer() PlayerEntity {
-	p := &playerEntity{}
+	p := &playerEntity{commands: make([]byte, 0, 8), owner: g}
 	width, height := g.worldMap.GetSize()
 
 	p.x = 1 + rand.Intn(width - 2)
@@ -112,14 +112,47 @@ type Entity interface {
 
 type PlayerEntity interface {
 	Entity
-	AddCommand()
+	AddCommand(command byte)
 }
 
 type playerEntity struct {
-	x, y int
+	x, y	 	int
+	commands	[]byte
+	owner		Game
 }
 
 func (p *playerEntity) Update() {
+	for _, c := range p.commands {
+		x, y := p.x, p.y
+		w, h := p.owner.GetMap().GetSize()
+
+		switch c {
+		case 'C':
+			x = x + 1
+		case 'A':
+			y = y - 1
+		case 'D':
+			x = x - 1
+		case 'B':
+			y = y + 1
+		}
+
+		if x < 1 {
+			x = 1
+		} else if x > w - 2 {
+			x = w - 2
+		}
+
+		if y < 1 {
+			y = 1
+		} else if y > h - 2 {
+			y = h - 2
+		}
+
+		p.x, p.y = x, y
+	}
+
+	p.commands = p.commands[:0]
 }
 
 func (p playerEntity) GetPosition() (int, int) {
@@ -131,5 +164,6 @@ func (p *playerEntity) SetPosition(x, y int) {
 	p.y = y
 }
 
-func (p *playerEntity) AddCommand() {
+func (p *playerEntity) AddCommand(command byte) {
+	p.commands = append(p.commands, command)
 }

@@ -123,7 +123,8 @@ func createConnectionHandler(conn net.Conn) {
 			logPrintf("Received %d bytes: %s\n", n, text)
 
 			if n == 3 {
-				x, y := player.GetPosition()
+				player.AddCommand(buffer[2])
+				/*x, y := player.GetPosition()
 				w, h := theGame.GetMap().GetSize()
 
 				switch buffer[2] {
@@ -149,7 +150,7 @@ func createConnectionHandler(conn net.Conn) {
 					y = h - 2
 				}
 
-				player.SetPosition(x, y)
+				player.SetPosition(x, y)*/
 			}
 		}
 
