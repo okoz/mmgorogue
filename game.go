@@ -74,10 +74,12 @@ type Game interface {
 	Update()
 	Start()
 	Stop()
+	GetChat() ChatService
 }
 
 type game struct {
 	worldMap	Map
+	chatService	ChatService
 	entities	map[Entity]bool
 	quit		chan bool
 	done		chan bool
@@ -85,7 +87,12 @@ type game struct {
 }
 
 func MakeGame() Game {
-	return &game{MakeMap(24, 24), make(map[Entity]bool), make(chan bool), make(chan bool), &sync.Mutex{}}
+	return &game{worldMap: MakeMap(24, 24),
+		chatService: CreateChatService(),
+		entities: make(map[Entity]bool),
+		quit: make(chan bool),
+		done: make(chan bool),
+		entityLock: &sync.Mutex{}}
 }
 
 func (g *game) GetMap() Map {
@@ -157,6 +164,10 @@ func (g *game) Stop() {
 	g.quit <- true
 	<- g.done
 	log.Printf("Game stopped\n")
+}
+
+func (g *game) GetChat() ChatService {
+	return g.chatService
 }
 
 // Entities.
