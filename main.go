@@ -7,10 +7,10 @@ import (
 	"net"
 	"os"
 	"strings"
-//	"time"
 )
 
 var theGame Game
+var theDatabase Database
 
 func readLine(telnet Telnet, echo bool, n int) (string, error) {
 	buffer := make([]byte, 512)
@@ -107,6 +107,7 @@ func createConnectionListener(listener net.Listener) {
 }
 
 func main() {
+	theDatabase = MakeDatabase()
 	theGame = MakeGame()
 
 	theGame.Start()
@@ -136,4 +137,5 @@ func main() {
 	}
 
 	theGame.Stop()
+	theDatabase.Close()
 }
