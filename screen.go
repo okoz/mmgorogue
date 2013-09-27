@@ -27,6 +27,7 @@ type Region interface {
 	Write(b []byte)
 	GetSize() (int, int)
 	MakeRegion(x, y, w, h int) Region
+	Clear(x, y, w, h int, b byte)
 }
 
 type region struct {
@@ -62,10 +63,13 @@ func (r *region) MakeRegion(x, y, w, h int) Region {
 	return &region{r, x, y, w, h, 0, 0}
 }
 
+func (r *region) Clear(x, y, w, h int, b byte) {
+	r.parent.Clear(r.x + x, r.y + y, w, h, b)
+}
+
 // An abstract screen that is viewed by the player.
 type Screen interface {
 	Region
-	Clear(x, y, w, h int, b byte)
 	Flip()
 	GetDelta() []ScreenDelta
 }
@@ -100,8 +104,8 @@ func MakeScreen(width, height int) Screen {
 func (s *screen) Clear(x, y, w, h int, b byte) {
 	cur := s.getCurrentBuffer()
 
-	for r := y; r < h; r++ {
-		for c := x; c < w; c++ {
+	for r := y; r < y + h; r++ {
+		for c := x; c < x + w; c++ {
 			cur[r * s.width + c] = b
 		}
 	}

@@ -3,6 +3,7 @@ package main
 type ChatService interface {
 	Send(origin Entity, message string)
 	Register(e Entity, handler func(Entity, string))
+	Unregister(e Entity)
 }
 
 type chatService struct {
@@ -15,10 +16,8 @@ func CreateChatService() ChatService {
 }
 
 func (s *chatService) Send(origin Entity, message string) {
-	for e, handler := range s.handlers {
-		if e != origin {
-			handler(origin, message)
-		}
+	for _, handler := range s.handlers {
+		handler(origin, message)
 	}
 }
 

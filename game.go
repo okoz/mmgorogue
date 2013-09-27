@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"container/list"
 	"log"
 	"math/rand"
 	"os"
@@ -135,11 +136,12 @@ func (g *game) CreatePlayer(t Telnet) PlayerEntity {
 	g.entityLock.Lock()
 	defer g.entityLock.Unlock()
 
-	p := &playerEntity{commands: make([]byte, 0, 8),
+	p := &playerEntity{commands: make([]Command, 0, 8),
 		owner: g,
 		screen: MakeScreen(80, 24),
 		telnet: t,
-		commandLock: &sync.Mutex{}}
+		commandLock: &sync.Mutex{},
+		chatting: false}
 	
 	minX, maxX, minY, maxY := 0, 0, 0, 0
 	switch rand.Intn(3) {
@@ -163,7 +165,13 @@ func (g *game) CreatePlayer(t Telnet) PlayerEntity {
 	p.x = minX + rand.Intn(maxX - minX)
 	p.y = minY + rand.Intn(maxY - minY)
 
+	p.chatBox = p.screen.MakeRegion(25, 23, 55, 1)
+	p.chatBuffer = make([]byte, 0, 128)
+	p.chatArea = p.screen.MakeRegion(25, 0, 55, 23)
+	p.chatHistory = list.New()
+
 	g.entities[p] = true
+	p.Initialize()
 	return p
 }
 
@@ -171,6 +179,7 @@ func (g *game) RemoveEntity(e Entity) {
 	g.entityLock.Lock()
 	defer g.entityLock.Unlock()
 
+	e.Terminate()
 	delete(g.entities, e)
 }
 
@@ -219,24 +228,51 @@ func (g *game) GetChat() ChatService {
 // Entities.
 
 type Entity interface {
+	Initialize()
 	Update()
 	PostUpdate()
+	Terminate()
 	GetPosition() (int, int)
 	SetPosition(x, y int)
 }
 
+type Command []byte
+
+func MakeCommand(b []byte) Command {
+	cmd := make(Command, len(b))
+	copy(cmd, b)
+	return cmd
+}
+
 type PlayerEntity interface {
 	Entity
-	AddCommand(command byte)
+	AddCommand(command Command)
 }
 
 type playerEntity struct {
 	x, y	 	int
-	commands	[]byte
+	commands	[]Command
 	owner		Game
 	screen		Screen
 	telnet		Telnet
 	commandLock	sync.Locker
+
+	chatBox		Region
+	chatBuffer	[]byte
+	chatting	bool
+	chatArea	Region
+	chatHistory	*list.List
+}
+
+func (p *playerEntity) onChat(o Entity, m string) {
+	p.chatHistory.PushBack(m)
+	if p.chatHistory.Len() >= 25 {
+		p.chatHistory.Remove(p.chatHistory.Front())
+	}
+}
+
+func (p *playerEntity) Initialize() {
+	p.owner.GetChat().Register(p, p.onChat)
 }
 
 func (p *playerEntity) Update() {
@@ -248,15 +284,41 @@ func (p *playerEntity) Update() {
 	for _, c := range p.commands {
 		x, y := p.x, p.y
 		
-		switch c {
-		case 'C':
-			x = x + 1
-		case 'A':
-			y = y - 1
-		case 'D':
-			x = x - 1
-		case 'B':
-			y = y + 1
+		switch len(c) {
+		case 3:
+			switch c[2] {
+			case 'C':
+				x = x + 1
+			case 'A':
+				y = y - 1
+			case 'D':
+				x = x - 1
+			case 'B':
+				y = y + 1
+			}
+		case 2:
+			if c[0] == '\r' && c[1] == '\n' {
+				p.owner.GetChat().Send(p, string(p.chatBuffer))
+				p.chatBuffer = p.chatBuffer[:0]
+			}
+		case 1:
+			buf := p.chatBuffer
+			bufLen := len(buf)
+
+			// Escape.
+			if c[0] == 27 {
+				p.chatBuffer = p.chatBuffer[:0]
+			}
+
+			// Backspace.
+			if c[0] == 127 && bufLen > 0 {
+				p.chatBuffer = p.chatBuffer[:bufLen - 1]
+			}
+				
+			// Printable character.
+			if c[0] >= 32 && c[0] != 127 && len(buf) < cap(buf) {
+				p.chatBuffer = append(p.chatBuffer, c[0])
+			}
 		}
 
 		if m.GetTile(x, y) == '~' || m.GetTile(x, y) == '#' {
@@ -292,8 +354,8 @@ func (p *playerEntity) PostUpdate() {
 	x1, y1 := Mini(mw, x0 + viewSize), Mini(mh, y0 + viewSize)
 	_, vh := x1 - x0, y1 - y0
 
+	// Draw the world.
 	s.Clear(0, 0, viewSize, viewSize, '~')
-
 	for r := 0; r < vh - oy; r++ {
 		n := m.GetRow(x0, y0 + r, mw, buffer)
 		s.GoTo(ox, oy + r)
@@ -301,6 +363,7 @@ func (p *playerEntity) PostUpdate() {
 		s.Write(buffer[:Mini(n - overflow, n)])
 	}
 
+	// Draw world entities visible to the player.
 	entities := p.owner.GetEntities()
 	for e := range entities {
 		x, y := e.GetPosition()
@@ -312,6 +375,27 @@ func (p *playerEntity) PostUpdate() {
 		s.Put('@')
 	}
 
+	// Draw chat area.
+	w, h := p.chatBox.GetSize()
+	p.chatBox.Clear(0, 0, w, h, ' ')
+	p.chatBox.GoTo(0, 0)
+	p.chatBox.Write(p.chatBuffer[Maxi(0, len(p.chatBuffer) - 55):])
+
+	w, h = p.chatArea.GetSize()
+	p.chatArea.Clear(0, 0, w, h, ' ')
+	r := h - 1
+	for e := p.chatHistory.Back(); e != nil; e = e.Prev() {
+		if r < 0 {
+			break
+		}
+
+		msg := []byte(e.Value.(string))
+
+		p.chatArea.GoTo(0, r)
+		p.chatArea.Write(msg)
+		r--
+	}
+
 	delta := s.GetDelta()
 
 	for _, d := range delta {
@@ -319,6 +403,10 @@ func (p *playerEntity) PostUpdate() {
 	}
 
 	s.Flip()
+}
+
+func (p *playerEntity) Terminate() {
+	p.owner.GetChat().Unregister(p)
 }
 
 func (p playerEntity) GetPosition() (int, int) {
@@ -330,7 +418,7 @@ func (p *playerEntity) SetPosition(x, y int) {
 	p.y = y
 }
 
-func (p *playerEntity) AddCommand(command byte) {
+func (p *playerEntity) AddCommand(command Command) {
 	p.commandLock.Lock()
 	defer p.commandLock.Unlock()
 

@@ -76,9 +76,7 @@ func createConnectionHandler(conn net.Conn) {
 			text := string(buffer[:n])
 			logPrintf("Received %d bytes: %s\n", n, text)
 
-			if n == 3 {
-				player.AddCommand(buffer[2])
-			}
+			player.AddCommand(MakeCommand(buffer[:n]))
 		}
 
 		theGame.RemoveEntity(player)
