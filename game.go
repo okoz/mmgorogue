@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"log"
 	"math/rand"
+	"os"
 	"sync"
 	"time"
 )
@@ -34,6 +36,32 @@ func MakeMap(width, height int) Map {
 	for i := 0; i < height; i++ {
 		m.tiles[width * i] = '#'
 		m.tiles[width * i + width - 1] = '#'
+	}
+
+	return m
+}
+
+func MakeMapFromFile(filename string) Map {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+		return nil
+	}
+
+	m := &map2D{}
+	data := make([]string, 0, 100)
+
+	for scanner := bufio.NewScanner(file); scanner.Scan(); {
+		data = append(data, scanner.Text())
+	}
+
+	file.Close()
+
+	m.width, m.height = len(data[0]), len(data)	
+	m.tiles = make([]byte, m.width * m.height)
+
+	for r := 0; r < m.height; r++ {
+		copy(m.tiles[r * m.width:], []byte(data[r]))
 	}
 
 	return m
@@ -87,7 +115,7 @@ type game struct {
 }
 
 func MakeGame() Game {
-	return &game{worldMap: MakeMap(24, 24),
+	return &game{worldMap: MakeMapFromFile("world/map.txt"),//MakeMap(24, 24),
 		chatService: CreateChatService(),
 		entities: make(map[Entity]bool),
 		quit: make(chan bool),
@@ -112,10 +140,28 @@ func (g *game) CreatePlayer(t Telnet) PlayerEntity {
 		screen: MakeScreen(80, 24),
 		telnet: t,
 		commandLock: &sync.Mutex{}}
-	width, height := g.worldMap.GetSize()
+	
+	minX, maxX, minY, maxY := 0, 0, 0, 0
+	switch rand.Intn(3) {
+	case 0:
+		minX = 9
+		minY = 37
+		maxX = 20
+		maxY = 40
+	case 1:
+		minX = 21
+		minY = 40
+		maxX = 24
+		maxY = 45
+	case 2:
+		minX = 27
+		minY = 41
+		maxX = 30
+		maxY = 46
+	}
 
-	p.x = 1 + rand.Intn(width - 2)
-	p.y = 1 + rand.Intn(height - 2)
+	p.x = minX + rand.Intn(maxX - minX)
+	p.y = minY + rand.Intn(maxY - minY)
 
 	g.entities[p] = true
 	return p
@@ -197,10 +243,11 @@ func (p *playerEntity) Update() {
 	p.commandLock.Lock()
 	defer p.commandLock.Unlock()
 
+	m := p.owner.GetMap()
+
 	for _, c := range p.commands {
 		x, y := p.x, p.y
-		w, h := p.owner.GetMap().GetSize()
-
+		
 		switch c {
 		case 'C':
 			x = x + 1
@@ -212,16 +259,8 @@ func (p *playerEntity) Update() {
 			y = y + 1
 		}
 
-		if x < 1 {
-			x = 1
-		} else if x > w - 2 {
-			x = w - 2
-		}
-
-		if y < 1 {
-			y = 1
-		} else if y > h - 2 {
-			y = h - 2
+		if m.GetTile(x, y) == '~' || m.GetTile(x, y) == '#' {
+			continue
 		}
 
 		p.x, p.y = x, y
@@ -253,7 +292,7 @@ func (p *playerEntity) PostUpdate() {
 	x1, y1 := Mini(mw, x0 + viewSize), Mini(mh, y0 + viewSize)
 	_, vh := x1 - x0, y1 - y0
 
-	s.Clear(0, 0, viewSize, viewSize)
+	s.Clear(0, 0, viewSize, viewSize, '~')
 
 	for r := 0; r < vh - oy; r++ {
 		n := m.GetRow(x0, y0 + r, mw, buffer)
