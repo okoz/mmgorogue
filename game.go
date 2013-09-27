@@ -311,7 +311,7 @@ func (p *playerEntity) Update() {
 			}
 
 			// Backspace.
-			if c[0] == 127 && bufLen > 0 {
+			if (c[0] == 127 || c[0] == 8) && bufLen > 0 {
 				p.chatBuffer = p.chatBuffer[:bufLen - 1]
 			}
 				
