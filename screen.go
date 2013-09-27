@@ -65,6 +65,7 @@ func (r *region) MakeRegion(x, y, w, h int) Region {
 // An abstract screen that is viewed by the player.
 type Screen interface {
 	Region
+	Clear(x, y, w, h int)
 	Flip()
 	GetDelta() []ScreenDelta
 }
@@ -93,6 +94,17 @@ func MakeScreen(width, height int) Screen {
 
 	s.delta = make([]byte, width * height)
 	return s
+}
+
+// Clear clears a portion of the screen.
+func (s *screen) Clear(x, y, w, h int) {
+	cur := s.getCurrentBuffer()
+
+	for r := y; r < h; r++ {
+		for c := x; c < w; c++ {
+			cur[r * s.width + c] = ' '
+		}
+	}
 }
 
 // Flip switches to a new screen buffer.

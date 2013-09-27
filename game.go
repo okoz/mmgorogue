@@ -225,15 +225,39 @@ func (p *playerEntity) PostUpdate() {
 	mw, mh := m.GetSize()
 	buffer := make([]byte, 512)
 
-	for r := 0; r < mh; r++ {
-		m.GetRow(0, r, mw, buffer)
-		s.GoTo(0, r)
-		s.Write(buffer[:mw])
+	// Compute visible rectangle.
+	viewSize := 24
+	x0, y0 := p.x - viewSize / 2, p.y - viewSize / 2
+	
+	ox, oy := 0, 0
+	if x0 < 0 {
+		ox = -x0
+		x0 = 0
+	}
+	if y0 < 0 {
+		oy = -y0
+		y0 = 0
+	}
+
+	x1, y1 := Mini(mw, x0 + viewSize), Mini(mh, y0 + viewSize)
+	_, vh := x1 - x0, y1 - y0
+
+	s.Clear(0, 0, viewSize, viewSize)
+
+	for r := 0; r < vh - oy; r++ {
+		n := m.GetRow(x0, y0 + r, mw, buffer)
+		s.GoTo(ox, oy + r)
+		overflow := ox + n - viewSize
+		s.Write(buffer[:Mini(n - overflow, n)])
 	}
 
 	entities := p.owner.GetEntities()
 	for e := range entities {
 		x, y := e.GetPosition()
+		x, y = ox + x - x0, oy + y - y0
+		if x < 0 || x >= viewSize || y < 0 || y >= viewSize {
+			continue
+		}
 		s.GoTo(x, y)
 		s.Put('@')
 	}
