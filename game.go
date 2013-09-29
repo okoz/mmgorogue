@@ -123,7 +123,8 @@ func MakeGame() Game {
 		done: make(chan bool),
 		entityLock: &sync.Mutex{}}
 
-	d := MakeDog(randomSpawnPoint())
+	dx, dy := randomSpawnPoint()
+	d := MakeDog(dx, dy, g)
 	g.entities[d] = true
 	d.Initialize()
 
@@ -442,18 +443,44 @@ func (p playerEntity) GetAppearance() byte {
 // Dog entity.
 
 type dog struct {
-	x, y int
+	x, y		int
+	owner		Game
+	moveTimer	int
 }
 
-func MakeDog(x, y int) Entity {
-	d := &dog{x, y}
+func MakeDog(x, y int, g Game) Entity {
+	d := &dog{x, y, g, 0}
 	return d
 }
 
 func (*dog) Initialize() {
 }
 
-func (*dog) Update() {
+func (d *dog) Update() {
+	if d.moveTimer < 10 {
+		d.moveTimer++
+		return
+	}
+
+	d.moveTimer = 0
+
+	x, y := d.x, d.y
+	switch rand.Int31n(4) {
+	case 0:
+		x += 1
+	case 1:
+		x -= 1
+	case 2:
+		y += 1
+	case 3:
+		y -= 1
+	}
+
+	if m := d.owner.GetMap(); m.GetTile(x, y) == '~' || m.GetTile(x, y) == '#' {
+		return
+	}
+
+	d.x, d.y = x, y
 }
 
 func (*dog) PostUpdate() {
