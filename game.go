@@ -116,12 +116,18 @@ type game struct {
 }
 
 func MakeGame() Game {
-	return &game{worldMap: MakeMapFromFile("world/map.txt"),//MakeMap(24, 24),
+	g := &game{worldMap: MakeMapFromFile("world/map.txt"),//MakeMap(24, 24),
 		chatService: CreateChatService(),
 		entities: make(map[Entity]bool),
 		quit: make(chan bool),
 		done: make(chan bool),
 		entityLock: &sync.Mutex{}}
+
+	d := MakeDog(randomSpawnPoint())
+	g.entities[d] = true
+	d.Initialize()
+
+	return g
 }
 
 func (g *game) GetMap() Map {
@@ -132,17 +138,7 @@ func (g *game) GetEntities() map[Entity]bool {
 	return g.entities
 }
 
-func (g *game) CreatePlayer(t Telnet) PlayerEntity {
-	g.entityLock.Lock()
-	defer g.entityLock.Unlock()
-
-	p := &playerEntity{commands: make([]Command, 0, 8),
-		owner: g,
-		screen: MakeScreen(80, 24),
-		telnet: t,
-		commandLock: &sync.Mutex{},
-		chatting: false}
-	
+func randomSpawnPoint() (int, int) {
 	minX, maxX, minY, maxY := 0, 0, 0, 0
 	switch rand.Intn(3) {
 	case 0:
@@ -162,8 +158,21 @@ func (g *game) CreatePlayer(t Telnet) PlayerEntity {
 		maxY = 46
 	}
 
-	p.x = minX + rand.Intn(maxX - minX)
-	p.y = minY + rand.Intn(maxY - minY)
+	return minX + rand.Intn(maxX - minX), minY + rand.Intn(maxY - minY)
+}
+
+func (g *game) CreatePlayer(t Telnet) PlayerEntity {
+	g.entityLock.Lock()
+	defer g.entityLock.Unlock()
+
+	p := &playerEntity{commands: make([]Command, 0, 8),
+		owner: g,
+		screen: MakeScreen(80, 24),
+		telnet: t,
+		commandLock: &sync.Mutex{},
+		chatting: false}
+	
+	p.x, p.y = randomSpawnPoint()
 
 	p.chatBox = p.screen.MakeRegion(25, 23, 55, 1)
 	p.chatBuffer = make([]byte, 0, 128)
@@ -234,6 +243,7 @@ type Entity interface {
 	Terminate()
 	GetPosition() (int, int)
 	SetPosition(x, y int)
+	GetAppearance() byte
 }
 
 type Command []byte
@@ -372,7 +382,7 @@ func (p *playerEntity) PostUpdate() {
 			continue
 		}
 		s.GoTo(x, y)
-		s.Put('@')
+		s.Put(e.GetAppearance())
 	}
 
 	// Draw chat area.
@@ -424,3 +434,43 @@ func (p *playerEntity) AddCommand(command Command) {
 
 	p.commands = append(p.commands, command)
 }
+
+func (p playerEntity) GetAppearance() byte {
+	return '@'
+}
+
+// Dog entity.
+
+type dog struct {
+	x, y int
+}
+
+func MakeDog(x, y int) Entity {
+	d := &dog{x, y}
+	return d
+}
+
+func (*dog) Initialize() {
+}
+
+func (*dog) Update() {
+}
+
+func (*dog) PostUpdate() {
+}
+
+func (*dog) Terminate() {
+}
+
+func (d dog) GetPosition() (int, int) {
+	return d.x, d.y
+}
+
+func (d *dog) SetPosition(x, y int) {
+	d.x, d.y = x, y
+}
+
+func (dog) GetAppearance() byte {
+	return 'd'
+}
+
