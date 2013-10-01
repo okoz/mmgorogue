@@ -131,9 +131,11 @@ func MakeGame() Game {
 		done: make(chan bool),
 		entityLock: &sync.Mutex{}}
 
-	dx, dy := randomSpawnPoint()
-	d := MakeDog(dx, dy, g)
-	g.AddEntity(d)
+	for i := 0; i < 10; i++ {
+		dx, dy := randomSpawnPoint()
+		d := MakeDog(dx, dy, g)
+		g.AddEntity(d)
+	}
 
 	return g
 }
@@ -151,19 +153,19 @@ func randomSpawnPoint() (int, int) {
 	switch rand.Intn(3) {
 	case 0:
 		minX = 9
-		minY = 37
+		minY = 36
 		maxX = 20
-		maxY = 40
+		maxY = 39
 	case 1:
 		minX = 21
-		minY = 40
+		minY = 39
 		maxX = 24
-		maxY = 45
+		maxY = 44
 	case 2:
 		minX = 27
-		minY = 41
+		minY = 40
 		maxX = 30
-		maxY = 46
+		maxY = 45
 	}
 
 	return minX + rand.Intn(maxX - minX), minY + rand.Intn(maxY - minY)
@@ -489,7 +491,7 @@ type dog struct {
 }
 
 func MakeDog(x, y int, g Game) Entity {
-	d := &dog{x, y, g, 0}
+	d := &dog{x, y, g}
 	return d
 }
 
