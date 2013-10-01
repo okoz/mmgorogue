@@ -7,5 +7,8 @@ CREATE USER 'server'@'localhost' IDENTIFIED BY 'mysql';
 GRANT ALL PRIVILEGES ON mmgorogue.* TO 'server'@'localhost';
 
 CREATE TABLE IF NOT EXISTS users (
-       user_name CHAR(32)
+       id INT NOT NULL AUTO_INCREMENT,
+       user_name CHAR(32) NOT NULL,
+       PRIMARY KEY(id),
+       UNIQUE KEY(user_name)
 );
