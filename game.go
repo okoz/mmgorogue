@@ -99,7 +99,9 @@ type Game interface {
 	GetMap() Map
 	GetEntities() map[Entity]bool
 	CreatePlayer(t Telnet) PlayerEntity
+	AddEntity(e Entity)
 	RemoveEntity(e Entity)
+	SleepEntity(e Entity, d time.Duration)
 	Update()
 	Start()
 	Stop()
@@ -107,26 +109,31 @@ type Game interface {
 }
 
 type game struct {
-	worldMap	Map
-	chatService	ChatService
-	entities	map[Entity]bool
-	quit		chan bool
-	done		chan bool
-	entityLock	sync.Locker
+	worldMap		Map
+	chatService		ChatService
+	entities		map[Entity]bool
+	activeEntities		map[Entity]bool
+	sleepingEntities	map[Entity]bool
+	delayedActions		[]func()
+	quit			chan bool
+	done			chan bool
+	entityLock		sync.Locker
 }
 
 func MakeGame() Game {
-	g := &game{worldMap: MakeMapFromFile("world/map.txt"),//MakeMap(24, 24),
+	g := &game{worldMap: MakeMapFromFile("world/map.txt"),
 		chatService: CreateChatService(),
 		entities: make(map[Entity]bool),
+		activeEntities: make(map[Entity]bool),
+		sleepingEntities: make(map[Entity]bool),
+		delayedActions: make([]func(), 0, 128),
 		quit: make(chan bool),
 		done: make(chan bool),
 		entityLock: &sync.Mutex{}}
 
 	dx, dy := randomSpawnPoint()
 	d := MakeDog(dx, dy, g)
-	g.entities[d] = true
-	d.Initialize()
+	g.AddEntity(d)
 
 	return g
 }
@@ -163,9 +170,6 @@ func randomSpawnPoint() (int, int) {
 }
 
 func (g *game) CreatePlayer(t Telnet) PlayerEntity {
-	g.entityLock.Lock()
-	defer g.entityLock.Unlock()
-
 	p := &playerEntity{commands: make([]Command, 0, 8),
 		owner: g,
 		screen: MakeScreen(80, 24),
@@ -180,9 +184,17 @@ func (g *game) CreatePlayer(t Telnet) PlayerEntity {
 	p.chatArea = p.screen.MakeRegion(25, 0, 55, 23)
 	p.chatHistory = list.New()
 
-	g.entities[p] = true
-	p.Initialize()
+	g.AddEntity(p)
 	return p
+}
+
+func (g *game) AddEntity(e Entity) {
+	g.entityLock.Lock()
+	defer g.entityLock.Unlock()
+
+	g.entities[e] = true
+	g.activeEntities[e] = true
+	e.Initialize()
 }
 
 func (g *game) RemoveEntity(e Entity) {
@@ -191,19 +203,48 @@ func (g *game) RemoveEntity(e Entity) {
 
 	e.Terminate()
 	delete(g.entities, e)
+	delete(g.activeEntities, e)
+	delete(g.sleepingEntities, e)
+}
+
+func (g *game) SleepEntity(e Entity, d time.Duration) {
+	g.delayedActions = append(g.delayedActions,
+		func() {
+			// Move the entity from the active list to the
+			// sleeping list.
+			delete(g.activeEntities, e)
+			g.sleepingEntities[e] = true
+
+			go func() {
+				select {
+				case <-time.After(d):
+					g.entityLock.Lock()
+					delete(g.sleepingEntities, e)
+					g.activeEntities[e] = true
+					g.entityLock.Unlock()
+				}
+			}()
+		})
 }
 
 func (g *game) Update() {
 	g.entityLock.Lock()
-	defer g.entityLock.Unlock()
-
-	for e, _ := range g.entities {
+	
+	for e, _ := range g.activeEntities {
 		e.Update()
 	}
 
 	for e, _ := range g.entities {
 		e.PostUpdate()
 	}
+
+	g.entityLock.Unlock()
+
+	for _, f := range g.delayedActions {
+		f()
+	}
+
+	g.delayedActions = g.delayedActions[:0]
 }
 
 func (g *game) run() {
@@ -445,7 +486,6 @@ func (p playerEntity) GetAppearance() byte {
 type dog struct {
 	x, y		int
 	owner		Game
-	moveTimer	int
 }
 
 func MakeDog(x, y int, g Game) Entity {
@@ -457,13 +497,6 @@ func (*dog) Initialize() {
 }
 
 func (d *dog) Update() {
-	if d.moveTimer < 10 {
-		d.moveTimer++
-		return
-	}
-
-	d.moveTimer = 0
-
 	x, y := d.x, d.y
 	switch rand.Int31n(4) {
 	case 0:
@@ -481,6 +514,8 @@ func (d *dog) Update() {
 	}
 
 	d.x, d.y = x, y
+
+	d.owner.SleepEntity(d, time.Second)
 }
 
 func (*dog) PostUpdate() {

@@ -129,10 +129,11 @@ func main() {
 		}
 
 		command := strings.TrimSpace(line)
-		print(line)
 
 		if command == "quit" {
 			break
+		} else {
+			fmt.Printf("Unknown command: %s\n", command)
 		}
 	}
 
