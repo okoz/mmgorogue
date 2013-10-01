@@ -76,7 +76,39 @@ func createConnectionHandler(conn net.Conn) {
 			text := string(buffer[:n])
 			logPrintf("Received %d bytes: %s\n", n, text)
 
-			player.AddCommand(MakeCommand(buffer[:n]))
+			// Process commands that are packed in a buffer.  This will
+			// mess up in certain cases when the codes are longer than
+			// 3 bytes or an incomplete character is received.
+			for i := 0; i < n; {
+				// Escape chcaracter.
+				if buffer[i] == 27 {
+					end := Mini(i + 3, n)
+
+					// Check up to 5 characters for an "end" character.  It seems to
+					// show up in the longer character codes.
+					for k := 1; k < 5 && i + k < n; k++ {
+						if buffer[i + k] == '~' {
+							end = i + k + 1
+							break
+						}
+					}
+
+					
+					player.AddCommand(MakeCommand(buffer[i:end]))
+					i = end
+				} else if buffer[i] == '\r' {
+					if i + 1 < n && buffer[i + 1] == '\n' {
+						player.AddCommand(MakeCommand(buffer[i:i+2]))
+						i += 2
+					} else {
+						player.AddCommand(MakeCommand([]byte{'\r', '\n'}))
+						i++
+					}
+				} else {
+					player.AddCommand(MakeCommand(buffer[i:i + 1]))
+					i++
+				}
+			}
 		}
 
 		theGame.RemoveEntity(player)
