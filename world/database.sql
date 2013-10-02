@@ -8,7 +8,11 @@ GRANT ALL PRIVILEGES ON mmgorogue.* TO 'server'@'localhost';
 
 CREATE TABLE IF NOT EXISTS users (
        id INT NOT NULL AUTO_INCREMENT,
-       user_name CHAR(32) NOT NULL,
-       PRIMARY KEY(id),
-       UNIQUE KEY(user_name)
+       user_name CHAR(16) NOT NULL,
+       password CHAR(128) NOT NULL,
+       email CHAR(254),
+       creation_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       last_login TIMESTAMP NULL,
+       PRIMARY KEY (id),
+       UNIQUE KEY (user_name)
 );
