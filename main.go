@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
 )
 
@@ -56,6 +57,37 @@ var title = []string{
 	"|_|  |_|_|  |_|  \\___|\\___/|_|_\\ \\___/  \\___|\\___/|___|",
 }
 
+// doAuthentication handles the authentication process.
+func doAuthentication(telnet Telnet) bool {
+	for i := range title {
+		telnet.GoTo(1, uint16(i + 1))
+		telnet.Write([]byte(title[i]))
+	}
+
+	telnet.ShowCursor(true)
+	telnet.GoTo(1, 10)
+	telnet.Write([]byte("user name: "))
+	name, _ := readLine(telnet, true, 16)
+	telnet.GoTo(1, 11)
+	telnet.Write([]byte("password: "))
+	password, _ := readLine(telnet, false, 64)
+
+	// Clear the screen.
+	w, h := telnet.GetScreenSize()
+	buff := make([]byte, 0, w)
+	for i := 0; i < int(w); i++ {
+		buff = append(buff, ' ')
+	}
+
+	var r uint16
+	for r = 0; r < h; r++ {
+		telnet.GoTo(1, r + 1)
+		telnet.Write(buff)
+	}
+
+	return theDatabase.Authenticate(name, password)
+}
+
 // createConnectionHandler creates a goroutine that handles a single
 // telnet connection.
 func createConnectionHandler(conn net.Conn) {
@@ -71,21 +103,7 @@ func createConnectionHandler(conn net.Conn) {
 		telnet := MakeTelnet(conn)
 		defer telnet.Close()
 
-		for i := range title {
-			telnet.GoTo(1, uint16(i + 1))
-			telnet.Write([]byte(title[i]))
-		}
-
-		telnet.GoTo(1, 10)
-		telnet.Write([]byte("user name: "))
-		name, _ := readLine(telnet, true, 16)
-		telnet.GoTo(1, 11)
-		telnet.Write([]byte("password: "))
-		password, _ := readLine(telnet, false, 64)
-
-		authGood := theDatabase.Authenticate(name, password)
-
-		if authGood {
+		if doAuthentication(telnet) {
 			telnet.ShowCursor(false)
 			player := theGame.CreatePlayer(telnet)
 
@@ -163,6 +181,17 @@ func createConnectionListener(listener net.Listener) {
 }
 
 func main() {
+	c := make(chan os.Signal, 1)
+	wait := make(chan int, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for _ = range c {
+			os.Stdin.Close()
+			<-wait
+			os.Exit(0)
+		}
+	}()
+
 	theDatabase = MakeDatabase()
 	theGame = MakeGame()
 
@@ -195,4 +224,5 @@ func main() {
 
 	theGame.Stop()
 	theDatabase.Close()
+	wait <- 0
 }
