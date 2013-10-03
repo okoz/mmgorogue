@@ -42,10 +42,18 @@ func readLine(telnet Telnet, echo bool, n int) (string, error) {
 				return string(sb), nil
 			}
 		}
-
-		print(string(sb))
-		print("\n")
 	}
+}
+
+var title = []string{
+	"   *      *              )  (       )                  ",
+	" (  `   (  `   (      ( /(  )\\ ) ( /( (                ",
+	" )\\))(  )\\))(  )\\ )   )\\())(()/( )\\()))\\ )      (  (   ",
+	"((_)()\\((_)()\\(()/(  ((_)\\  /(_)((_)\\(()/(      )\\ )\\  ",
+	"(_()((_(_()((_)/(_))_  ((_)(_))   ((_)/(_))_ _ ((_((_) ",
+	"|  \\/  |  \\/  (_)) __|/ _ \\| _ \\ / _ (_)) __| | | | __|",
+	"| |\\/| | |\\/| | | (_ | (_) |   /| (_) || (_ | |_| | _| ",
+	"|_|  |_|_|  |_|  \\___|\\___/|_|_\\ \\___/  \\___|\\___/|___|",
 }
 
 // createConnectionHandler creates a goroutine that handles a single
@@ -63,55 +71,71 @@ func createConnectionHandler(conn net.Conn) {
 		telnet := MakeTelnet(conn)
 		defer telnet.Close()
 
-		telnet.ShowCursor(false)
-		player := theGame.CreatePlayer(telnet)
-
-		for {
-			n, err := telnet.Read(buffer)
-			if err != nil {
-				logPrintf(err.Error())
-				break
-			}
-
-			text := string(buffer[:n])
-			logPrintf("Received %d bytes: %s\n", n, text)
-
-			// Process commands that are packed in a buffer.  This will
-			// mess up in certain cases when the codes are longer than
-			// 3 bytes or an incomplete character is received.
-			for i := 0; i < n; {
-				// Escape chcaracter.
-				if buffer[i] == 27 {
-					end := Mini(i + 3, n)
-
-					// Check up to 5 characters for an "end" character.  It seems to
-					// show up in the longer character codes.
-					for k := 1; k < 5 && i + k < n; k++ {
-						if buffer[i + k] == '~' {
-							end = i + k + 1
-							break
-						}
-					}
-
-					
-					player.AddCommand(MakeCommand(buffer[i:end]))
-					i = end
-				} else if buffer[i] == '\r' {
-					if i + 1 < n && buffer[i + 1] == '\n' {
-						player.AddCommand(MakeCommand(buffer[i:i+2]))
-						i += 2
-					} else {
-						player.AddCommand(MakeCommand([]byte{'\r', '\n'}))
-						i++
-					}
-				} else {
-					player.AddCommand(MakeCommand(buffer[i:i + 1]))
-					i++
-				}
-			}
+		for i := range title {
+			telnet.GoTo(1, uint16(i + 1))
+			telnet.Write([]byte(title[i]))
 		}
 
-		theGame.RemoveEntity(player)
+		telnet.GoTo(1, 10)
+		telnet.Write([]byte("user name: "))
+		name, _ := readLine(telnet, true, 16)
+		telnet.GoTo(1, 11)
+		telnet.Write([]byte("password: "))
+		password, _ := readLine(telnet, false, 64)
+
+		authGood := theDatabase.Authenticate(name, password)
+
+		if authGood {
+			telnet.ShowCursor(false)
+			player := theGame.CreatePlayer(telnet)
+
+			for {
+				n, err := telnet.Read(buffer)
+				if err != nil {
+					logPrintf(err.Error())
+					break
+				}
+
+				text := string(buffer[:n])
+				logPrintf("Received %d bytes: %s\n", n, text)
+
+				// Process commands that are packed in a buffer.  This will
+				// mess up in certain cases when the codes are longer than
+				// 3 bytes or an incomplete character is received.
+				for i := 0; i < n; {
+					// Escape chcaracter.
+					if buffer[i] == 27 {
+						end := Mini(i + 3, n)
+
+						// Check up to 5 characters for an "end" character.  It seems to
+						// show up in the longer character codes.
+						for k := 1; k < 5 && i + k < n; k++ {
+							if buffer[i + k] == '~' {
+								end = i + k + 1
+								break
+							}
+						}
+
+					
+						player.AddCommand(MakeCommand(buffer[i:end]))
+						i = end
+					} else if buffer[i] == '\r' {
+						if i + 1 < n && buffer[i + 1] == '\n' {
+							player.AddCommand(MakeCommand(buffer[i:i+2]))
+							i += 2
+						} else {
+							player.AddCommand(MakeCommand([]byte{'\r', '\n'}))
+							i++
+						}
+					} else {
+						player.AddCommand(MakeCommand(buffer[i:i + 1]))
+						i++
+					}
+				}
+			}
+
+			theGame.RemoveEntity(player)
+		}
 
 		logPrintf("Disconnecting\n")
 	}

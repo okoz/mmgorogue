@@ -58,8 +58,9 @@ func (d *database) Close() {
 }
 
 func eatRemainingResults(res mysql.Result) {
+	var err error = nil
 	for !res.StatusOnly() {
-		res, err := res.NextResult()
+		res, err = res.NextResult()
 		checkError(err)
 		if res == nil {
 			log.Fatal("nil query result!")
@@ -71,10 +72,10 @@ func eatRemainingResults(res mysql.Result) {
 func (d *database) Authenticate(name string, password string) bool {
 	row, res, err := d.authStmt.ExecFirst(name, password)
 	checkError(err)
-
+	
 	success, err := row.BoolErr(0)
 	checkError(err)
-
+	
 	eatRemainingResults(res)
 	return success
 }
