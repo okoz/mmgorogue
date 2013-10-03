@@ -21,8 +21,8 @@ BEGIN
 		AND users.password = SHA2(password, 512))
 	THEN
 		UPDATE users SET last_login = NOW() WHERE users.user_name = user_name;
-		SELECT 1 AS 'user_exists';
-	ELSE SELECT 0 AS 'user_exists';
+		SELECT 1 AS 'success';
+	ELSE SELECT 0 AS 'success';
 	END IF;
 END//
 
