@@ -57,6 +57,8 @@ var title = []string{
 	"|_|  |_|_|  |_|  \\___|\\___/|_|_\\ \\___/  \\___|\\___/|___|",
 }
 
+type stateFunc func(int, int) (stateFunc, error)
+
 // doAuthentication handles the authentication process.
 func doAuthentication(telnet Telnet) bool {
 	for i := range title {
@@ -65,27 +67,102 @@ func doAuthentication(telnet Telnet) bool {
 	}
 
 	telnet.ShowCursor(true)
-	telnet.GoTo(1, 10)
-	telnet.Write([]byte("user name: "))
-	name, _ := readLine(telnet, true, 16)
-	telnet.GoTo(1, 11)
-	telnet.Write([]byte("password: "))
-	password, _ := readLine(telnet, false, 64)
+	
+	writeLine := func(x, y int, s string) {
+		telnet.GoTo(uint16(x), uint16(y))
+		telnet.Write([]byte(s))
+	}
+
+	clearRect := func(x, y, w, h int) {
+		clear := strings.Repeat(" ", w)
+
+		for r := 0; r < h; r++ {
+			writeLine(x, y + r, clear)
+		}
+	}
+
+	var writeMenu stateFunc
+	var logIn stateFunc
+
+	writeMenu = func(x, y int) (sf stateFunc, err error) {
+		sf = writeMenu
+		err = nil
+
+		clearRect(x, y, 18, 5)
+
+		writeLine(x, y, "1. Log in")
+		writeLine(x, y + 1, "2. Create account")
+		writeLine(x, y + 2, "3. Disconnect")
+		writeLine(x, y + 4, "Selection: ")
+
+		selection, err := readLine(telnet, true, 1)
+		if err != nil {
+			sf = nil
+			return
+		}
+		
+		switch selection {
+		case "1":
+			sf = logIn
+			clearRect(x, y, 18, 5)
+		case "3":
+			sf = nil
+		}
+
+		return
+	}
+
+	authenticated := false
+	logIn = func(x, y int) (sf stateFunc, err error) {
+		sf = logIn
+		err = nil
+
+		writeLine(x, y, "User name: ")
+		name, err := readLine(telnet, true, 16)
+		if err != nil {
+			return
+		}
+
+		writeLine(x, y + 1, "Password: ")
+		password, err := readLine(telnet, false, 64)
+		if err != nil {
+			return
+		}
+
+		authenticated = theDatabase.Authenticate(name, password)
+		if !authenticated {
+			clearRect(x, y, 27, 2)
+			writeLine(x, y + 2, "Invalid credentials")
+		} else {
+			sf = nil
+		}
+
+		return
+	}
+
+
+	curState := writeMenu
+
+	for {
+		nextState, err := curState(1, 10)
+		if err != nil {
+			log.Printf(err.Error())
+			return false
+		}
+
+		curState = nextState
+		if curState == nil {
+			break
+		}
+
+		
+	}
 
 	// Clear the screen.
 	w, h := telnet.GetScreenSize()
-	buff := make([]byte, 0, w)
-	for i := 0; i < int(w); i++ {
-		buff = append(buff, ' ')
-	}
+	clearRect(0, 0, int(w), int(h))
 
-	var r uint16
-	for r = 0; r < h; r++ {
-		telnet.GoTo(1, r + 1)
-		telnet.Write(buff)
-	}
-
-	return theDatabase.Authenticate(name, password)
+	return authenticated
 }
 
 // createConnectionHandler creates a goroutine that handles a single
