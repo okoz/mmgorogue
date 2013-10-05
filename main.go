@@ -62,7 +62,7 @@ type stateFunc func(int, int) (stateFunc, error)
 // doAuthentication handles the authentication process.
 func doAuthentication(telnet Telnet) bool {
 	for i := range title {
-		telnet.GoTo(1, uint16(i + 1))
+		telnet.GoTo(12, uint16(i + 1))
 		telnet.Write([]byte(title[i]))
 	}
 
@@ -138,12 +138,12 @@ func doAuthentication(telnet Telnet) bool {
 			}
 
 			if !theDatabase.UserExists(name) {
-				clearRect(x, y, 27, 3)
+				clearRect(x, userNameErrorLine, 27, 3)
 				break
 			}
 
 			writeLine(x, userNameErrorLine, "User already exists")
-			clearRect(x, y, 27, 1)
+			clearRect(x, userNameLine, 27, 1)
 		}
 
 		for {
@@ -153,6 +153,11 @@ func doAuthentication(telnet Telnet) bool {
 				return
 			}
 			
+			if len(password) == 0 {
+				writeLine(x, passwordErrorLine, "I'd prefer a longer password")
+				continue
+			}
+
 			var repeatPassword string
 			writeLine(x, repeatPasswordLine, "Repeat Password: ")
 			repeatPassword, err = readLine(telnet, false, 64)
@@ -161,17 +166,24 @@ func doAuthentication(telnet Telnet) bool {
 			}
 
 			if password == repeatPassword {
-				clearRect(x, passwordErrorLine, 27, 3)
+				clearRect(x, passwordErrorLine, 27, 1)
 				break
 			}
 
 			writeLine(x, passwordErrorLine, "Passwords do not match")
-			clearRect(x, repeatPasswordLine, 27, 3)
+			clearRect(x, repeatPasswordLine, 27, 1)
 		}
 
 		writeLine(x, emailLine, "E-Mail for password recovery: ")
-		email, err = readLine(telnet, false, 254)
-		print(email, "\n")
+		email, err = readLine(telnet, true, 254)
+
+		success, err := theDatabase.CreateUser(name, password, email)
+		clearRect(x, userNameLine, 80, 5)
+
+		if !success {
+			sf = createAccount
+			writeLine(x, userNameErrorLine, "Account creation failed!")
+		}
 
 		return
 	}
