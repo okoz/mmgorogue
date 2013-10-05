@@ -83,6 +83,7 @@ func doAuthentication(telnet Telnet) bool {
 
 	var writeMenu stateFunc
 	var logIn stateFunc
+	var createAccount stateFunc
 
 	writeMenu = func(x, y int) (sf stateFunc, err error) {
 		sf = writeMenu
@@ -105,9 +106,72 @@ func doAuthentication(telnet Telnet) bool {
 		case "1":
 			sf = logIn
 			clearRect(x, y, 18, 5)
+		case "2":
+			sf = createAccount
+			clearRect(x, y, 18, 5)
 		case "3":
 			sf = nil
 		}
+
+		return
+	}
+
+	createAccount = func(x, y int) (sf stateFunc, err error) {
+		sf = writeMenu
+		err = nil
+
+		userNameLine := y
+		userNameErrorLine := y + 2
+
+		passwordLine := y + 1
+		repeatPasswordLine := y + 2
+		passwordErrorLine := y + 3
+
+		emailLine := y + 3
+		
+		name, password, email := "", "", ""
+		for {
+			writeLine(x, userNameLine, "User name: ")
+			name, err = readLine(telnet, true, 16)
+			if err != nil {
+				return
+			}
+
+			if !theDatabase.UserExists(name) {
+				clearRect(x, y, 27, 3)
+				break
+			}
+
+			writeLine(x, userNameErrorLine, "User already exists")
+			clearRect(x, y, 27, 1)
+		}
+
+		for {
+			writeLine(x, passwordLine, "Password: ")
+			password, err = readLine(telnet, false, 64)
+			if err != nil {
+				return
+			}
+			
+			var repeatPassword string
+			writeLine(x, repeatPasswordLine, "Repeat Password: ")
+			repeatPassword, err = readLine(telnet, false, 64)
+			if err != nil {
+				return
+			}
+
+			if password == repeatPassword {
+				clearRect(x, passwordErrorLine, 27, 3)
+				break
+			}
+
+			writeLine(x, passwordErrorLine, "Passwords do not match")
+			clearRect(x, repeatPasswordLine, 27, 3)
+		}
+
+		writeLine(x, emailLine, "E-Mail for password recovery: ")
+		email, err = readLine(telnet, false, 254)
+		print(email, "\n")
 
 		return
 	}
@@ -153,9 +217,7 @@ func doAuthentication(telnet Telnet) bool {
 		curState = nextState
 		if curState == nil {
 			break
-		}
-
-		
+		}		
 	}
 
 	// Clear the screen.

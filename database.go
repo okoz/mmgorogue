@@ -11,12 +11,14 @@ type Database interface {
 	Close()
 	Authenticate(name string, password string) bool
 	CreateUser(name string, password string, email string) (bool, error)
+	UserExists(name string) bool
 }
 
 type database struct {
 	db		mysql.Conn
 	authStmt	mysql.Stmt
 	createUserStmt	mysql.Stmt
+	userExistsStmt	mysql.Stmt
 }
 
 func checkError(err error) {
@@ -33,11 +35,14 @@ func (d *database) prepareStatements() {
 	checkError(err)
 	d.createUserStmt, err = db.Prepare("CALL create_user(?, ?, ?)")
 	checkError(err)
+	d.userExistsStmt, err = db.Prepare("CALL user_exists(?)")
+	checkError(err)
 }
 
 func (d *database) terminateStatements() {
 	d.authStmt.Delete()
 	d.createUserStmt.Delete()
+	d.userExistsStmt.Delete()
 }
 
 func MakeDatabase() Database {
@@ -94,4 +99,15 @@ func (d *database) CreateUser(name string, password string, email string) (bool,
 	}
 
 	return msg == "OK", err
+}
+
+func (d *database) UserExists(name string) bool {
+	row, res, err := d.userExistsStmt.ExecFirst(name)
+	checkError(err)
+
+	exists, err := row.BoolErr(0)
+	checkError(err)
+
+	eatRemainingResults(res)
+	return exists
 }

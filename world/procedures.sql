@@ -26,4 +26,13 @@ BEGIN
 	END IF;
 END//
 
+DROP PROCEDURE IF EXISTS user_exists;
+CREATE PROCEDURE user_exists(user_name CHAR(16))
+BEGIN
+	IF EXISTS(SELECT * FROM users WHERE users.user_name = user_name)
+	THEN SELECT 1 AS 'exists';
+	ELSE SELECT 0 AS 'exists';
+	END IF;
+END//
+
 DELIMITER ;
