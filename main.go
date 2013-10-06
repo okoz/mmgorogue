@@ -17,30 +17,43 @@ func readLine(telnet Telnet, echo bool, n int) (string, error) {
 	buffer := make([]byte, 512)
 	sb := make([]byte, 0, n)
 
+	const (
+		Default = iota
+		GotReturn
+	)
+
+	state := Default
+
 	for {
 		m, err := telnet.Read(buffer)
 		if err != nil {
 			return "", err
 		}
 
-		switch m {
-		case 1:
-			if buffer[0] == 127 {
-				if len(sb) > 0 {
-					sb = sb[:len(sb) - 1]
+		for i := 0; i < m; i++ {
+			switch state {
+			case Default:
+				if buffer[i] == 127 {
+					if len(sb) > 0 {
+						sb = sb[:len(sb) - 1]
+						if echo {
+							telnet.Put(buffer[i])
+						}
+					}
+				} else if buffer[i] == '\r' {
+					state = GotReturn
+				} else if len(sb) < n {
+					sb = append(sb, buffer[i])
 					if echo {
-						telnet.Put(buffer[0])
+						telnet.Put(buffer[i])
 					}
 				}
-			} else if len(sb) < n {
-				sb = append(sb, buffer[0])
-				if echo {
-					telnet.Put(buffer[0])
+			case GotReturn:
+				if buffer[i] == '\n' {
+					return string(sb), nil
 				}
-			}
-		case 2:
-			if buffer[0] == '\r' && buffer[1] == '\n' {
-				return string(sb), nil
+
+				state = Default
 			}
 		}
 	}
