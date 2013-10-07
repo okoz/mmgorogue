@@ -35,4 +35,33 @@ BEGIN
 	END IF;
 END//
 
+DROP PROCEDURE IF EXISTS user_inventory;
+CREATE PROCEDURE user_inventory(user_name CHAR(16))
+BEGIN
+       SELECT COUNT(*) AS count, item_id, item_name
+       FROM inventory
+       INNER JOIN items ON inventory.item_id = items.id
+       INNER JOIN users ON inventory.user_id = users.id
+       WHERE users.user_name = user_name
+       GROUP BY item_id;
+END//
+
+DROP PROCEDURE IF EXISTS user_give_item;
+CREATE PROCEDURE user_give_item(user_name CHAR(16), item_name CHAR(64))
+BEGIN
+	INSERT INTO inventory VALUES(
+	       (SELECT id FROM users WHERE users.user_name = user_name),
+	       (SELECT id FROM items WHERE items.item_name = item_name)
+	);
+END//
+
+DROP PROCEDURE IF EXISTS user_take_item;
+CREATE PROCEDURE user_take_item(user_name CHAR(16), item_name CHAR(64))
+BEGIN
+       DELETE FROM inventory
+       WHERE inventory.user_id = (SELECT id FROM users WHERE users.user_name = user_name)
+       AND inventory.item_id = (SELECT id FROM items WHERE items.item_name = item_name)
+       LIMIT 1;
+END//
+
 DELIMITER ;
