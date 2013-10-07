@@ -73,7 +73,7 @@ var title = []string{
 type stateFunc func(int, int) (stateFunc, error)
 
 // doAuthentication handles the authentication process.
-func doAuthentication(telnet Telnet) bool {
+func doAuthentication(telnet Telnet) (bool, string) {
 	for i := range title {
 		telnet.GoTo(12, uint16(i + 1))
 		telnet.Write([]byte(title[i]))
@@ -202,12 +202,13 @@ func doAuthentication(telnet Telnet) bool {
 	}
 
 	authenticated := false
+	name := ""
 	logIn = func(x, y int) (sf stateFunc, err error) {
 		sf = logIn
 		err = nil
 
 		writeLine(x, y, "User name: ")
-		name, err := readLine(telnet, true, 16)
+		name, err = readLine(telnet, true, 16)
 		if err != nil {
 			return
 		}
@@ -236,7 +237,7 @@ func doAuthentication(telnet Telnet) bool {
 		nextState, err := curState(1, 10)
 		if err != nil {
 			log.Printf(err.Error())
-			return false
+			return false, ""
 		}
 
 		curState = nextState
@@ -249,7 +250,7 @@ func doAuthentication(telnet Telnet) bool {
 	w, h := telnet.GetScreenSize()
 	clearRect(0, 0, int(w), int(h))
 
-	return authenticated
+	return authenticated, name
 }
 
 // createConnectionHandler creates a goroutine that handles a single
@@ -267,9 +268,10 @@ func createConnectionHandler(conn net.Conn) {
 		telnet := MakeTelnet(conn)
 		defer telnet.Close()
 
-		if doAuthentication(telnet) {
+		if authenticated, name := doAuthentication(telnet); authenticated {
 			telnet.ShowCursor(false)
 			player := theGame.CreatePlayer(telnet)
+			player.SetName(name)
 
 			for {
 				n, err := telnet.Read(buffer)

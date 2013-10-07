@@ -301,10 +301,13 @@ func MakeCommand(b []byte) Command {
 type PlayerEntity interface {
 	Entity
 	AddCommand(command Command)
+	SetName(name string)
+	GetName() string
 }
 
 type playerEntity struct {
 	x, y	 	int
+	name		string
 	commands	[]Command
 	owner		Game
 	screen		Screen
@@ -352,7 +355,7 @@ func (p *playerEntity) Update() {
 			}
 		case 2:
 			if c[0] == '\r' && c[1] == '\n' {
-				p.owner.GetChat().Send(p, string(p.chatBuffer))
+				p.owner.GetChat().Send(p, p.GetName() + ": " + string(p.chatBuffer))
 				p.chatBuffer = p.chatBuffer[:0]
 			}
 		case 1:
@@ -472,6 +475,10 @@ func (p *playerEntity) SetPosition(x, y int) {
 	p.y = y
 }
 
+func (p playerEntity) GetAppearance() byte {
+	return '@'
+}
+
 func (p *playerEntity) AddCommand(command Command) {
 	p.commandLock.Lock()
 	defer p.commandLock.Unlock()
@@ -479,9 +486,14 @@ func (p *playerEntity) AddCommand(command Command) {
 	p.commands = append(p.commands, command)
 }
 
-func (p playerEntity) GetAppearance() byte {
-	return '@'
+func (p *playerEntity) SetName(name string) {
+	p.name = name
 }
+
+func (p playerEntity) GetName() string {
+	return p.name
+}
+
 
 // Dog entity.
 
