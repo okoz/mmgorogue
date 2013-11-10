@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 )
 
@@ -33,26 +34,25 @@ func readLine(telnet Telnet, echo bool, n int) (string, error) {
 		for i := 0; i < m; i++ {
 			switch state {
 			case Default:
-				if buffer[i] == 127 {
+				if buffer[i] == 127 || buffer[i] == 8 {
 					if len(sb) > 0 {
 						sb = sb[:len(sb) - 1]
 						if echo {
-							telnet.Put(buffer[i])
+							// Send a backspace, a space and then another backspace.
+							telnet.Put(8, ' ', 8)
 						}
 					}
 				} else if buffer[i] == '\r' {
 					state = GotReturn
-				} else if len(sb) < n {
+				} else if len(sb) < n && strconv.IsPrint(rune(buffer[i])) {
 					sb = append(sb, buffer[i])
 					if echo {
 						telnet.Put(buffer[i])
 					}
 				}
 			case GotReturn:
-				if buffer[i] == '\n' {
-					return string(sb), nil
-				}
-
+				return string(sb), nil
+				
 				state = Default
 			}
 		}
@@ -74,13 +74,6 @@ type stateFunc func(int, int) (stateFunc, error)
 
 // doAuthentication handles the authentication process.
 func doAuthentication(telnet Telnet) (bool, string) {
-	for i := range title {
-		telnet.GoTo(12, uint16(i + 1))
-		telnet.Write([]byte(title[i]))
-	}
-
-	telnet.ShowCursor(true)
-	
 	writeLine := func(x, y int, s string) {
 		telnet.GoTo(uint16(x), uint16(y))
 		telnet.Write([]byte(s))
@@ -93,6 +86,16 @@ func doAuthentication(telnet Telnet) (bool, string) {
 			writeLine(x, y + r, clear)
 		}
 	}
+
+	// Assume at least an 80x24 screen and then clear it.
+	clearRect(0, 0, 80, 24)
+
+	for i := range title {
+		telnet.GoTo(12, uint16(i + 1))
+		telnet.Write([]byte(title[i]))
+	}
+
+	telnet.ShowCursor(true)
 
 	var writeMenu stateFunc
 	var logIn stateFunc
@@ -229,7 +232,6 @@ func doAuthentication(telnet Telnet) (bool, string) {
 
 		return
 	}
-
 
 	curState := writeMenu
 
